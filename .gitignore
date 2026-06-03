@@ -12,3 +12,4 @@ data/hidden_test/*.mat
 # OS
 Thumbs.db
 .DS_Store
+Pred_Labels.csv
