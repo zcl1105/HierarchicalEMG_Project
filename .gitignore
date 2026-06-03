@@ -1,0 +1,14 @@
+# MATLAB temp
+*.m~
+*.asv
+
+# Generated outputs
+outputs/
+
+# Data files (large .mat, store separately)
+data/train/legacy_data/
+data/hidden_test/*.mat
+
+# OS
+Thumbs.db
+.DS_Store
