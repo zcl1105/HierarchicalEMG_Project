@@ -13,10 +13,10 @@ cfg.latestLink = fullfile(projectRoot, 'outputs', 'LATEST.txt');
 
 % --- labels & features ---
 cfg.classNames = {'BicepsCurl','HammerCurl','ShoulderPress'};
-cfg.featureNames = {'RMS1','RMS2','Ratio','XCorrCoef','XCorrLag_ms', ...
-                    'MF1','MF2','nWL1','nWL2'};
-cfg.stage1FeatureIdx = 1:4;   % RMS1, RMS2, Ratio, XCorrCoef
-cfg.stage2FeatureIdx = 1:9;   % 全部9维
+cfg.featureNames = {'RMS2','Ratio','Ratio_MAV', ...
+                    'RMS1','ZC','SSC','MF','MDF','PF'};
+cfg.stage1FeatureIdx = 1:3;   % Stage 1: 推肩检测 (RMS2,Ratio,Ratio_MAV — 三头激活+比值)
+cfg.stage2FeatureIdx = 4:9;   % Stage 2: 弯举细分 (RMS1,ZC,SSC,MF,MDF,PF — 二头幅值+时频域)
 
 % --- paths ---
 cfg.trainDirs = {fullfile(projectRoot, 'data', 'train')};
@@ -45,10 +45,6 @@ cfg.minDuration_s   = 0.35;
 cfg.prePad_s        = 0.15;
 cfg.postPad_s       = 0.20;
 cfg.sameActionGap_s = 0.75;
-
-% --- features ---
-cfg.xcorrMaxLag_s    = 0.30;
-cfg.envelopeSmooth_s = 0.05;
 
 % --- training ---
 cfg.testRatio = 0.30;

@@ -1,62 +1,64 @@
 function [features, segmentTable] = extract_hier_features(emg1, emg2, segments, cfg)
 % Extract 9-dim feature vector per action segment.
 %
-% Features 1-5 (basic):
-%   RMS1, RMS2, Ratio, XCorrCoef, XCorrLag_ms
-% Features 6-9:
-%   MF1, MF2, nWL1, nWL2  (nWL = WL/RMS, 幅值无关的波形复杂度)
+% Stage 1 (推肩 vs 弯举类, 1:3):
+%   RMS2, Ratio, Ratio_MAV  — 肱三头肌激活 + 二三头比值
+%
+% Stage 2 (弯举 vs 锤式弯举, 4:9):
+%   RMS1, ZC, SSC, MF, MDF, PF  — 二头肌幅值 + 时域/频域特征
 
 features = zeros(size(segments, 1), 9);
 startTimes = zeros(size(segments, 1), 1);
 endTimes = zeros(size(segments, 1), 1);
 
-maxLag = round(cfg.xcorrMaxLag_s * cfg.fs);
-envWin = round(cfg.envelopeSmooth_s * cfg.fs);
-
 for i = 1:size(segments, 1)
     idx1 = segments(i, 1);
     idx2 = segments(i, 2);
-    seg1 = emg1(idx1:idx2);
-    seg2 = emg2(idx1:idx2);
+    seg1 = emg1(idx1:idx2);  % 肱二头肌
+    seg2 = emg2(idx1:idx2);  % 肱三头肌
+    N1 = length(seg1);
 
-    % --- Feature 1-2: RMS ---
+    % ===== Stage 1 特征: 推肩 vs 弯举类 =====
+
     rms1 = sqrt(mean(seg1.^2));
     rms2 = sqrt(mean(seg2.^2));
+    mav1 = mean(abs(seg1));
+    mav2 = mean(abs(seg2));
 
-    % --- Feature 3: Ratio ---
-    ratio = rms1 / (rms2 + eps);
+    fRms2     = rms2;                  % F1: 肱三头肌RMS — 推肩主靠三头发力
+    fRatio    = rms1 / (rms2 + eps);   % F2: RMS比值 — 推肩时比值低,弯举时高
+    fRatioMAV = mav1 / (mav2 + eps);   % F3: 能量比值 — 同上,MAV版本
 
-    % --- Feature 4-5: Cross-correlation ---
-    env1 = movmean(abs(seg1), envWin);
-    env2 = movmean(abs(seg2), envWin);
-    env1 = env1 - mean(env1);
-    env2 = env2 - mean(env2);
+    % ===== Stage 2 特征: 弯举 vs 锤式弯举 (仅二头肌) =====
 
-    [xc, lags] = xcorr(env1, env2, maxLag, 'coeff');
-    [~, bestIdx] = max(abs(xc));
-    corrCoef = xc(bestIdx);
-    lagMs = lags(bestIdx) / cfg.fs * 1000;
+    fRMS1 = rms1;                      % F4: 肱二头肌RMS
 
-    % --- Feature 6-7: Mean Frequency ---
-    M1 = length(seg1);
+    % 过零率 ZC
+    zc = sum(diff(sign(seg1 - mean(seg1))) ~= 0) / N1;  % F5
+
+    % 斜率变化 SSC
+    dseg = diff(seg1);
+    ssc = sum(diff(sign(dseg)) ~= 0) / max(N1 - 2, 1);  % F6
+
+    % FFT
     Y1 = fft(seg1);
-    P1 = abs(Y1(1:floor(M1/2)+1)).^2;
-    f1 = (0:floor(M1/2))' * cfg.fs / M1;
-    mf1 = sum(f1 .* P1) / (sum(P1) + eps);
+    P1 = abs(Y1(1:floor(N1/2)+1)).^2;
+    f1 = (0:floor(N1/2))' * cfg.fs / N1;
+    totalP = sum(P1) + eps;
 
-    M2 = length(seg2);
-    Y2 = fft(seg2);
-    P2 = abs(Y2(1:floor(M2/2)+1)).^2;
-    f2 = (0:floor(M2/2))' * cfg.fs / M2;
-    mf2 = sum(f2 .* P2) / (sum(P2) + eps);
+    % 均值频率 MF
+    mf = sum(f1 .* P1) / totalP;       % F7
 
-    % --- Feature 8-9: Normalized Waveform Length ---
-    wl1 = sum(abs(diff(seg1)));
-    wl2 = sum(abs(diff(seg2)));
-    nWL1 = wl1 / (rms1 + eps);
-    nWL2 = wl2 / (rms2 + eps);
+    % 中位频率 MDF
+    cumP = cumsum(P1);
+    mdfIdx = find(cumP >= cumP(end)/2, 1, 'first');
+    mdf = f1(mdfIdx);                  % F8
 
-    features(i, :) = [rms1, rms2, ratio, corrCoef, lagMs, mf1, mf2, nWL1, nWL2];
+    % 主频率 PF
+    [~, pfIdx] = max(P1);
+    pf = f1(pfIdx);                    % F9
+
+    features(i, :) = [fRms2, fRatio, fRatioMAV, fRMS1, zc, ssc, mf, mdf, pf];
     startTimes(i) = (idx1 - 1) / cfg.fs;
     endTimes(i) = (idx2 - 1) / cfg.fs;
 end
