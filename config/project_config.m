@@ -47,5 +47,6 @@ cfg.postPad_s       = 0.20;
 cfg.sameActionGap_s = 0.75;
 
 % --- training ---
+cfg.classifier = 'lda';    % 'lda' (线性判别) or 'svm' (RBF-SVM)
 cfg.testRatio = 0.30;
 end

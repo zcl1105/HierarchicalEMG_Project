@@ -1,12 +1,13 @@
 function models = train_hierarchical_models(X, Y, cfg)
-% Train 2-stage hierarchical SVM with 70/30 train/test split.
+% Train 2-stage hierarchical classifier with 70/30 train/test split.
 %
 % Stage 1 (ShoulderPress=3 vs rest=1,2):
-%   幅值+比值: RMS1,MAV1,RMS2,MAV2,Ratio → "两通道是否同时激活"
+%   RMS2, Ratio, Ratio_MAV → "三头肌激活+比值" 判推肩
 %
 % Stage 2 (BicepsCurl=1 vs HammerCurl=2):
-%   指定特征子集 → 弯举 vs 锤式弯举
-%   训练/测试各用70/30的弯举样本
+%   RMS1, ZC, SSC, MF, MDF, PF → "二头幅值+时频域" 分弯举类型
+%
+% cfg.classifier: 'lda' (线性判别) or 'svm' (RBF-SVM)
 
 cv = cvpartition(Y, 'HoldOut', cfg.testRatio);
 trainIdx = training(cv);
@@ -17,28 +18,36 @@ YTrain = Y(trainIdx);
 XTest = X(testIdx, :);
 YTest = Y(testIdx);
 
-fprintf('\nTrain samples: %d | Test samples: %d\n', length(YTrain), length(YTest));
+fprintf('\nTrain: %d | Test: %d | Classifier: %s\n', length(YTrain), length(YTest), upper(cfg.classifier));
 
 % --- Stage 1: ShoulderPress vs not ---
 X1Train = XTrain(:, cfg.stage1FeatureIdx);
 Y1Train = double(YTrain == 3);
 [X1TrainZ, mu1, sigma1] = zscore_safe(X1Train);
-model1 = fitcsvm(X1TrainZ, Y1Train, ...
-    'KernelFunction', 'rbf', ...
-    'KernelScale', 'auto', ...
-    'Standardize', false, ...
-    'ClassNames', [0 1]);
+
+switch lower(cfg.classifier)
+    case 'lda'
+        model1 = fitcdiscr(X1TrainZ, Y1Train, 'DiscrimType', 'linear');
+    case 'svm'
+        model1 = fitcsvm(X1TrainZ, Y1Train, ...
+            'KernelFunction', 'rbf', 'KernelScale', 'auto', ...
+            'Standardize', false, 'ClassNames', [0 1]);
+end
 
 % --- Stage 2: BicepsCurl vs HammerCurl ---
 curlTrainIdx = (YTrain ~= 3);
 X2Train = XTrain(curlTrainIdx, cfg.stage2FeatureIdx);
 Y2Train = YTrain(curlTrainIdx);
 [X2TrainZ, mu2, sigma2] = zscore_safe(X2Train);
-model2 = fitcsvm(X2TrainZ, Y2Train, ...
-    'KernelFunction', 'rbf', ...
-    'KernelScale', 'auto', ...
-    'Standardize', false, ...
-    'ClassNames', [1 2]);
+
+switch lower(cfg.classifier)
+    case 'lda'
+        model2 = fitcdiscr(X2TrainZ, Y2Train, 'DiscrimType', 'linear');
+    case 'svm'
+        model2 = fitcsvm(X2TrainZ, Y2Train, ...
+            'KernelFunction', 'rbf', 'KernelScale', 'auto', ...
+            'Standardize', false, 'ClassNames', [1 2]);
+end
 
 fprintf('Stage2: %d curl train / %d curl test\n', length(Y2Train), sum(YTest ~= 3));
 
