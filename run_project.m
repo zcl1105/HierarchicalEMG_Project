@@ -140,6 +140,7 @@ end
 if ~exist(cfg.outputDir, 'dir'), mkdir(cfg.outputDir); end
 fprintf('========== Hidden Test: %d files ==========\n', numel(hiddenFiles));
 hiddenTable = table();
+fileOverallLabels = zeros(numel(hiddenFiles), 1);
 
 for i = 1:numel(hiddenFiles)
     fileName = hiddenFiles{i};
@@ -166,8 +167,13 @@ for i = 1:numel(hiddenFiles)
 
     [hiddenPred, hiddenStage1, hiddenStage2] = predict_hierarchical(featureMatrix, models);
     n = size(featureMatrix, 1);
-    overallLabel = mode(hiddenPred);
+
+    % 综合分析: 取所有片段的平均特征向量做整体预测
+    meanFeatures = mean(featureMatrix, 1);
+    filePred = predict_hierarchical(meanFeatures, models);
+    overallLabel = filePred;
     overallName = labels_to_names(overallLabel, cfg.classNames);
+    fileOverallLabels(i) = overallLabel;
 
     if cfg.showHiddenPlots && segmentSource == "Auto"
         [~, fname, ext] = fileparts(fileName);
@@ -196,14 +202,11 @@ end
 % --- 汇总 ---
 fprintf('\n--- Hidden Summary ---\n');
 fileIDs = zeros(numel(hiddenFiles), 1);
-filePreds = zeros(numel(hiddenFiles), 1);
 for i = 1:numel(hiddenFiles)
-    fileName = hiddenFiles{i};
-    fileRows = hiddenTable(hiddenTable.SourceFile == string(fileName), :);
-    [~, fname, ~] = fileparts(fileName);
+    [~, fname, ~] = fileparts(hiddenFiles{i});
     fileIDs(i) = str2double(fname);
-    filePreds(i) = mode(fileRows.PredLabel);
 end
+filePreds = fileOverallLabels;
 [fileIDs, sortIdx] = sort(fileIDs);
 filePreds = filePreds(sortIdx);
 

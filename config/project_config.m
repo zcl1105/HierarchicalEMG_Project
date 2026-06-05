@@ -3,7 +3,7 @@ cfg.projectRoot = projectRoot;
 cfg.fs = 2000;
 cfg.randomSeed = 1;
 cfg.showTrainPlots  = false;
-cfg.showHiddenPlots = true;
+cfg.showHiddenPlots = false;
 cfg.forceRetrain = true;
 
 % --- versioning ---
