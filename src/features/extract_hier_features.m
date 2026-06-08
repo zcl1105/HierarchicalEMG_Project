@@ -1,4 +1,4 @@
-function features = extract_hier_features(emg1, emg2, segments, cfg)
+function [features, segmentTable] = extract_hier_features(emg1, emg2, segments, cfg)
 % Extract 40-dim feature vector per action segment.
 %
 % 每通道18维 × 2 + 跨通道4维 = 40维
@@ -7,8 +7,8 @@ function features = extract_hier_features(emg1, emg2, segments, cfg)
 % 单通道频域(6):  MF, MDF, PF, 频谱熵, 带宽, 低频能量比
 % 跨通道(4):     RMS比值, 能量比值, 相关性, 三头肌RMS
 %
-% Stage 1 (推肩检测): 三头RMS, RMS比值, 能量比值 → 3维
-% Stage 2 (弯举细分): 自动筛选最优特征组合
+% Stage 1 (推肩检测): F40,F37,F38 → 3维
+% Stage 2 (弯举细分): 双通道时域+频域+跨通道 → 24维 (具体索引见 config)
 
 nSegs = size(segments, 1);
 features = zeros(nSegs, 40);

@@ -4,8 +4,9 @@ close all;
 
 %% ============================================================
 %  基于双通道 sEMG 的层级动作分类
-%  Stage 1: 推肩 vs 非推肩 (5维)
-%  Stage 2: 弯举 vs 锤式弯举 (9维: +MF +WL)
+%  Stage 1: SVM — 推肩 vs 弯举类 (3维: 三头RMS+RMS比+能量比)
+%  Stage 2: RF  — 弯举 vs 锤式弯举 (24维: 双通道+跨通道)
+%  文件决策: 多数投票 + SVM分数平票仲裁
 %
 %  标签: 1=弯举  2=锤式弯举  3=推肩
 %% ============================================================
@@ -111,7 +112,7 @@ else
     % 训练
     X = allTable{:, featureNames};
     Y = allTable.Label;
-    models = train_hierarchical_models(X, Y, cfg);
+    models = train_hierarchical_models(X, Y, cfg, allTable.SourceFile);
     save(cfg.modelPath, 'models');
 
     % 写版本指针
@@ -141,6 +142,7 @@ end
 if ~exist(cfg.outputDir, 'dir'), mkdir(cfg.outputDir); end
 fprintf('========== Hidden Test: %d files ==========\n', numel(hiddenFiles));
 hiddenTable = table();
+hiddenFileSummary = table();
 
 for i = 1:numel(hiddenFiles)
     fileName = hiddenFiles{i};
@@ -165,9 +167,9 @@ for i = 1:numel(hiddenFiles)
 
     [featureMatrix, segTab] = extract_hier_features(emg1, emg2, segments, cfg);
 
-    [hiddenPred, hiddenStage1, hiddenStage2] = predict_hierarchical(featureMatrix, models);
+    [hiddenPred, hiddenStage1, hiddenStage2, ~, hiddenStage2Scores] = predict_hierarchical(featureMatrix, models);
     n = size(featureMatrix, 1);
-    overallLabel = mode(hiddenPred);
+    [overallLabel, fileStats] = aggregate_file_prediction(hiddenPred, hiddenStage1, hiddenStage2Scores, cfg);
     overallName = labels_to_names(overallLabel, cfg.classNames);
 
     if cfg.showHiddenPlots && segmentSource == "Auto"
@@ -187,11 +189,29 @@ for i = 1:numel(hiddenFiles)
     T.PredAction = labels_to_names(hiddenPred, cfg.classNames);
     T.Stage1_IsShoulder = hiddenStage1;
     T.Stage2_CurlType   = hiddenStage2;
+    T.Stage2Score_Biceps = hiddenStage2Scores(:, 1);
+    T.Stage2Score_Hammer = hiddenStage2Scores(:, 2);
 
     hiddenTable = [hiddenTable; T]; %#ok<AGROW>
 
     [~, fname, ext] = fileparts(fileName);
-    fprintf('  %-25s  %2d seg  -->  %s\n', [fname ext], n, overallName);
+    fileRow = table();
+    fileRow.SourceFile = string(fileName);
+    fileRow.ID = str2double(fname);
+    fileRow.NumSegments = n;
+    fileRow.FilePredLabel = overallLabel;
+    fileRow.FilePredAction = string(overallName);
+    fileRow.VoteCount1 = fileStats.VoteCount1;
+    fileRow.VoteCount2 = fileStats.VoteCount2;
+    fileRow.VoteCount3 = fileStats.VoteCount3;
+    fileRow.Stage2MeanScore1 = fileStats.Stage2MeanScore1;
+    fileRow.Stage2MeanScore2 = fileStats.Stage2MeanScore2;
+    fileRow.DecisionRule = fileStats.DecisionRule;
+    hiddenFileSummary = [hiddenFileSummary; fileRow]; %#ok<AGROW>
+
+    fprintf('  %-25s  %2d seg  -->  %s  [%d/%d/%d, %s]\n', ...
+        [fname ext], n, overallName, fileStats.VoteCount1, fileStats.VoteCount2, ...
+        fileStats.VoteCount3, fileStats.DecisionRule);
 end
 
 % --- 汇总 ---
@@ -200,10 +220,10 @@ fileIDs = zeros(numel(hiddenFiles), 1);
 filePreds = zeros(numel(hiddenFiles), 1);
 for i = 1:numel(hiddenFiles)
     fileName = hiddenFiles{i};
-    fileRows = hiddenTable(hiddenTable.SourceFile == string(fileName), :);
     [~, fname, ~] = fileparts(fileName);
     fileIDs(i) = str2double(fname);
-    filePreds(i) = mode(fileRows.PredLabel);
+    summaryRow = hiddenFileSummary(hiddenFileSummary.SourceFile == string(fileName), :);
+    filePreds(i) = summaryRow.FilePredLabel(1);
 end
 [fileIDs, sortIdx] = sort(fileIDs);
 filePreds = filePreds(sortIdx);
@@ -225,8 +245,10 @@ hiddenTable = movevars(hiddenTable, ...
     {'SourceFile','ActionIndex','StartTime_s','EndTime_s', ...
      'SegmentSource','PredLabel','PredAction'}, 'Before', 1);
 writetable(hiddenTable, cfg.hiddenDetailPath);
+writetable(hiddenFileSummary, cfg.hiddenFileSummaryPath);
 fprintf('\nSubmit:  %s\n', cfg.hiddenSubmitPath);
 fprintf('Details: %s\n', cfg.hiddenDetailPath);
+fprintf('File summary: %s\n', cfg.hiddenFileSummaryPath);
 
 %% ============================================================
 function templateRows = make_segment_template_rows(T)

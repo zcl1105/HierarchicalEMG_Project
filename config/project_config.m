@@ -14,8 +14,11 @@ cfg.latestLink = fullfile(projectRoot, 'outputs', 'LATEST.txt');
 % --- labels & features ---
 cfg.classNames = {'BicepsCurl','HammerCurl','ShoulderPress'};
 % 40维特征: ch1时域(1:12) ch1频域(13:18) ch2时域(19:30) ch2频域(31:36) 跨通道(37:40)
-cfg.stage1FeatureIdx = [40, 37, 38];   % Stage 1: 推肩检测 (三头RMS,RMS比值,能量比值)
-cfg.stage2FeatureIdx = [1:18, 40];     % Stage 2: 弯举细分 (二头18全特征+三头RMS)
+cfg.stage1FeatureIdx = [40, 37, 38];   % Stage 1: 推肩 (三头RMS, RMS比值, 能量比值)
+cfg.stage2FeatureIdx = [1, 2, 4, 5, 6, 7, 13, 14, 16, 18, ...
+                        19, 20, 22, 23, 24, 25, 31, 32, 34, 36, ...
+                        37, 38, 39, 40];  % Stage 2: 弯举/锤式 (双通道时域+频域+跨通道, 24维)
+cfg.fileVoteMinMargin = 2;  % 文件决策: 弯举票差小于此值时用Stage2分数仲裁
 
 % --- paths ---
 cfg.trainDirs = {fullfile(projectRoot, 'data', 'train')};
@@ -26,6 +29,7 @@ cfg.datasetPath         = fullfile(cfg.outputDir, 'dataset.xlsx');
 cfg.modelPath           = fullfile(cfg.outputDir, 'model.mat');
 cfg.segmentTemplatePath = fullfile(cfg.outputDir, 'segment_template.xlsx');
 cfg.hiddenDetailPath    = fullfile(cfg.outputDir, 'hidden_detail.xlsx');
+cfg.hiddenFileSummaryPath = fullfile(cfg.outputDir, 'hidden_file_summary.xlsx');
 cfg.hiddenSubmitPath    = fullfile(cfg.outputDir, 'Pred_Labels.csv');
 
 % --- preprocessing ---
