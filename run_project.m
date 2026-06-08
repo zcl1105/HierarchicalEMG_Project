@@ -17,6 +17,7 @@ addpath(fullfile(projectRoot, 'config'));
 
 cfg = project_config(projectRoot);
 rng(cfg.randomSeed);
+featureNames = cellstr(strtrim(sprintfc('F%d ', 1:40)));  % F1..F40
 
 %% 2. 收集训练数据
 trainFiles = collect_training_files(cfg.trainDirs, cfg.classNames);
@@ -79,7 +80,7 @@ else
         [featureMatrix, segTab] = extract_hier_features(emg1, emg2, segments, cfg);
         n = size(featureMatrix, 1);
 
-        T = array2table(featureMatrix, 'VariableNames', cfg.featureNames);
+        T = array2table(featureMatrix, 'VariableNames', featureNames);
         T.Label = repmat(label, n, 1);
         T.ActionName = repmat(string(labelName), n, 1);
         T.SourceFile = repmat(string(fileName), n, 1);
@@ -108,7 +109,7 @@ else
     writetable(segmentTemplate, cfg.segmentTemplatePath);
 
     % 训练
-    X = allTable{:, cfg.featureNames};
+    X = allTable{:, featureNames};
     Y = allTable.Label;
     models = train_hierarchical_models(X, Y, cfg);
     save(cfg.modelPath, 'models');
@@ -140,7 +141,6 @@ end
 if ~exist(cfg.outputDir, 'dir'), mkdir(cfg.outputDir); end
 fprintf('========== Hidden Test: %d files ==========\n', numel(hiddenFiles));
 hiddenTable = table();
-fileOverallLabels = zeros(numel(hiddenFiles), 1);
 
 for i = 1:numel(hiddenFiles)
     fileName = hiddenFiles{i};
@@ -167,13 +167,8 @@ for i = 1:numel(hiddenFiles)
 
     [hiddenPred, hiddenStage1, hiddenStage2] = predict_hierarchical(featureMatrix, models);
     n = size(featureMatrix, 1);
-
-    % 综合分析: 取所有片段的平均特征向量做整体预测
-    meanFeatures = mean(featureMatrix, 1);
-    filePred = predict_hierarchical(meanFeatures, models);
-    overallLabel = filePred;
+    overallLabel = mode(hiddenPred);
     overallName = labels_to_names(overallLabel, cfg.classNames);
-    fileOverallLabels(i) = overallLabel;
 
     if cfg.showHiddenPlots && segmentSource == "Auto"
         [~, fname, ext] = fileparts(fileName);
@@ -182,7 +177,7 @@ for i = 1:numel(hiddenFiles)
             sprintf('Hidden: %s%s', fname, ext), cfg, predActionNames);
     end
 
-    T = array2table(featureMatrix, 'VariableNames', cfg.featureNames);
+    T = array2table(featureMatrix, 'VariableNames', featureNames);
     T.SourceFile = repmat(string(fileName), n, 1);
     T.ActionIndex = (1:n)';
     T.StartTime_s = segTab.StartTime_s;
@@ -202,11 +197,14 @@ end
 % --- 汇总 ---
 fprintf('\n--- Hidden Summary ---\n');
 fileIDs = zeros(numel(hiddenFiles), 1);
+filePreds = zeros(numel(hiddenFiles), 1);
 for i = 1:numel(hiddenFiles)
-    [~, fname, ~] = fileparts(hiddenFiles{i});
+    fileName = hiddenFiles{i};
+    fileRows = hiddenTable(hiddenTable.SourceFile == string(fileName), :);
+    [~, fname, ~] = fileparts(fileName);
     fileIDs(i) = str2double(fname);
+    filePreds(i) = mode(fileRows.PredLabel);
 end
-filePreds = fileOverallLabels;
 [fileIDs, sortIdx] = sort(fileIDs);
 filePreds = filePreds(sortIdx);
 

@@ -13,10 +13,9 @@ cfg.latestLink = fullfile(projectRoot, 'outputs', 'LATEST.txt');
 
 % --- labels & features ---
 cfg.classNames = {'BicepsCurl','HammerCurl','ShoulderPress'};
-cfg.featureNames = {'RMS2','Ratio','Ratio_MAV', ...
-                    'RMS1','ZC','SSC','MF','MDF','PF'};
-cfg.stage1FeatureIdx = 1:3;   % Stage 1: 推肩检测 (RMS2,Ratio,Ratio_MAV — 三头激活+比值)
-cfg.stage2FeatureIdx = 4:9;   % Stage 2: 弯举细分 (RMS1,ZC,SSC,MF,MDF,PF — 二头幅值+时频域)
+% 40维特征: ch1时域(1:12) ch1频域(13:18) ch2时域(19:30) ch2频域(31:36) 跨通道(37:40)
+cfg.stage1FeatureIdx = [40, 37, 38];   % Stage 1: 推肩检测 (三头RMS,RMS比值,能量比值)
+cfg.stage2FeatureIdx = [1:18, 40];     % Stage 2: 弯举细分 (二头18全特征+三头RMS)
 
 % --- paths ---
 cfg.trainDirs = {fullfile(projectRoot, 'data', 'train')};
@@ -47,6 +46,5 @@ cfg.postPad_s       = 0.20;
 cfg.sameActionGap_s = 0.75;
 
 % --- training ---
-cfg.classifier = 'lda';    % 'lda' (线性判别) or 'svm' (RBF-SVM)
 cfg.testRatio = 0.30;
 end

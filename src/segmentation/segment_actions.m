@@ -93,6 +93,19 @@ for i = 1:numel(starts)
     segments(i, :) = [sampleStart, sampleEnd];
 end
 
+% --- Top-6 能量筛选: 去碎片 ---
+% 每文件4-6次重复动作, 多于6段时按能量排序只保留最强6段
+if size(segments, 1) > 6
+    segEnergy = zeros(size(segments, 1), 1);
+    for i = 1:size(segments, 1)
+        segEnergy(i) = sqrt(mean(emg1(segments(i,1):segments(i,2)).^2)) ...
+                     + sqrt(mean(emg2(segments(i,1):segments(i,2)).^2));
+    end
+    [~, sortIdx] = sort(segEnergy, 'descend');
+    keep = sort(sortIdx(1:6));
+    segments = segments(keep, :);
+end
+
 % --- diagnostic info ---
 info.tFrame = tFrame;
 info.rms1 = rms1Norm;
