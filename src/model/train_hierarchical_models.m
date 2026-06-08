@@ -97,28 +97,6 @@ for fold = 1:5
 end
 
 conf = confusionmat(YCurl, YPred, 'Order', [1 2]);
-
-% per-file error breakdown
-curlGroups = string(groups(curlIdx));
-allFiles = unique(curlGroups);
-fprintf('  Stage2 CV per-file errors:\n');
-for f = 1:numel(allFiles)
-    fileIdx = curlGroups == allFiles(f);
-    fileY = YCurl(fileIdx);
-    filePred = YPred(fileIdx);
-    nErr = sum(fileY ~= filePred);
-    if nErr > 0
-        errs = '';
-        for s = 1:sum(fileIdx)
-            if fileY(s) ~= filePred(s)
-                errs = [errs sprintf('%d→%d ', fileY(s), filePred(s))]; %#ok<AGROW>
-            end
-        end
-        [~, fname, ext] = fileparts(allFiles(f));
-        fprintf('    %s%s: %d/%d [%s]\n', fname, ext, nErr, sum(fileIdx), strtrim(errs));
-    end
-end
-
 diag = struct();
 diag.Accuracy = mean(YPred == YCurl);
 diag.NCorrect = sum(YPred == YCurl);
