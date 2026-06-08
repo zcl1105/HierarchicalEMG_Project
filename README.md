@@ -16,27 +16,74 @@
 | 分类 | Stage1 SVM(RBF) + Stage2 RF + RF分数仲裁 | 层级决策+文件级投票 |
 | 验证 | 70/30留出 + Stage2 5折交叉验证 | 双重评估 |
 
-## Folder Layout
+## 文件说明
 
-```
-HierarchicalEMG_Project/
-  run_project.m                 Main entry point
-  config/
-    project_config.m            All parameters
-  src/
-    io/                         File discovery, labels, MAT loading
-    signal/                     EMG preprocessing
-    segmentation/               Action segmentation
-    features/                   Feature extraction (40-dim)
-    model/                      Hierarchical SVM+RF + file-level aggregation
-    evaluation/                 Metrics, confusion matrix
-    visualization/              Diagnostic plots
-  data/
-    train/                      Training .mat files
-    hidden_test/                Hidden test .mat files
-  outputs/                      Generated results (timestamped folders)
-  tests/                        Unit tests
-```
+### 入口
+| 文件 | 任务 |
+|------|------|
+| `run_project.m` | 主程序: 初始化→收集数据→预处理→分割→特征→训练→评估→隐藏测试集预测 |
+
+### config/
+| 文件 | 任务 |
+|------|------|
+| `project_config.m` | 全局参数: 采样率/路径/预处理/分割/特征索引/训练超参, 所有可调参数集中在这里 |
+
+### src/io/ — 数据读写
+| 文件 | 任务 |
+|------|------|
+| `collect_training_files.m` | 递归收集 `data/train/` 下符合命名规则的 .mat 文件, 按文件名分配标签 |
+| `collect_hidden_files.m` | 收集 `data/hidden_test/` 下所有 .mat 文件 (无命名限制) |
+| `recursive_mat_files.m` | 递归搜索目录下所有 .mat 文件 |
+| `label_from_emg_file.m` | 从文件名解析标签: `emg0xx→1` `emg1xx→2` `emg2xx→3` |
+| `load_emg_matrix.m` | 加载 .mat 文件中的 N×2 EMG 矩阵 |
+| `load_manual_segments.m` | 加载手动分割文件 (可选, 覆盖自动分割) |
+| `find_manual_segments_for_file.m` | 从手动分割表中查找某文件的窗口 |
+| `normalize_file_key.m` | 文件名归一化 (去路径、小写), 用于手动分割匹配 |
+
+### src/signal/ — 信号处理
+| 文件 | 任务 |
+|------|------|
+| `preprocess_emg.m` | 预处理流水线: detrend→50Hz陷波(及谐波)→20Hz高通→500Hz低通 |
+| `my_notch.m` | IIR陷波滤波器, 去除工频干扰 |
+
+### src/segmentation/ — 动作分割
+| 文件 | 任务 |
+|------|------|
+| `segment_actions.m` | 通道归一化自适应阈值分割: RMS→P95归一化→合并能量→平滑→阈值→Top-6筛选 |
+| `close_small_gaps.m` | 填充二值序列中的小间隙 (同一动作内的短暂RMS回落) |
+| `merge_overlapping_windows.m` | 合并重叠的时间窗口 |
+
+### src/features/ — 特征提取
+| 文件 | 任务 |
+|------|------|
+| `extract_hier_features.m` | 提取40维特征: 每通道时域12+频域6, 跨通道4 (RMS比/能量比/相关系数/三头RMS) |
+
+### src/model/ — 模型训练与预测
+| 文件 | 任务 |
+|------|------|
+| `train_hierarchical_models.m` | 两层分类器训练: Stage1 SVM(RBF,3维) + Stage2 RF(24维,50棵树) + 5折CV诊断 |
+| `predict_hierarchical.m` | 两层预测: Stage1判推肩→非推肩进Stage2判弯举类型 (支持SVM和RF) |
+| `aggregate_file_prediction.m` | 文件级决策: 多数投票 + RF分数平票仲裁 |
+| `zscore_safe.m` | z-score标准化 (计算均值/标准差) |
+| `apply_zscore_safe.m` | 应用已有的z-score标准化参数 |
+
+### src/evaluation/ — 评估
+| 文件 | 任务 |
+|------|------|
+| `compute_metrics.m` | 计算混淆矩阵/准确率/精确率/召回率/F1 |
+| `print_prediction_table.m` | 打印评估报告: 混淆矩阵 + 各类指标 + 两阶段分阶段准确率 |
+| `labels_to_names.m` | 标签数字→动作名称映射 |
+
+### src/visualization/ — 可视化
+| 文件 | 任务 |
+|------|------|
+| `plot_confusion_result.m` | 绘制混淆矩阵图 |
+| `plot_segmentation_diagnostics.m` | 绘制分割诊断图: 原始EMG+检测窗口 + 归一化RMS能量+阈值线 |
+
+### tests/
+| 文件 | 任务 |
+|------|------|
+| `test_aggregate_file_prediction.m` | 文件级决策单元测试 (多数投票 + 分数仲裁场景) |
 
 ## 数据命名规则
 
