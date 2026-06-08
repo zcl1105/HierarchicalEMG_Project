@@ -5,7 +5,7 @@
 ## 项目概览
 
 ```
-文件 → 预处理 → 动作分割 → 40维特征提取 → 两层SVM分类 → 文件级决策
+文件 → 预处理 → 动作分割 → 40维特征提取 → 两层分类(SVM+RF) → 文件级决策
 ```
 
 | 环节 | 方法 | 说明 |
@@ -13,8 +13,8 @@
 | 预处理 | detrend → 50Hz陷波 → 20-500Hz带通 | 去基线+工频+噪声 |
 | 分割 | 通道归一化能量 + 自适应阈值 + Top-6筛选 | P95归一化使两通道等权 |
 | 特征 | 40维 (时域12+频域6)×2通道 + 跨通道4 | 丰富特征捕捉肌电模式 |
-| 分类 | 两层 RBF-SVM + SVM分数平票仲裁 | 层级决策+文件级投票 |
-| 验证 | 70/30留出 + Stage2留一文件交叉验证 | 双重评估 |
+| 分类 | Stage1 SVM(RBF) + Stage2 RF + RF分数仲裁 | 层级决策+文件级投票 |
+| 验证 | 70/30留出 + Stage2 5折交叉验证 | 双重评估 |
 
 ## Folder Layout
 
@@ -28,7 +28,7 @@ HierarchicalEMG_Project/
     signal/                     EMG preprocessing
     segmentation/               Action segmentation
     features/                   Feature extraction (40-dim)
-    model/                      Hierarchical SVM + file-level aggregation
+    model/                      Hierarchical SVM+RF + file-level aggregation
     evaluation/                 Metrics, confusion matrix
     visualization/              Diagnostic plots
   data/
@@ -86,14 +86,14 @@ F40      三头肌RMS
            │
            ▼
    ┌──────────────────────┐
-   │  Stage 2 SVM (24维)   │  双通道时域+频域+跨通道
-   │  弯举 vs 锤式弯举     │  ClassNames=[1,2]
+   │  Stage 2 RF (24维)    │  双通道时域+频域+跨通道
+   │  弯举 vs 锤式弯举     │  50棵树, MinLeaf=5
    └──────────────────────┘
        │
        ▼
  ┌─────────────────┐
- │ 文件级决策        │  多数投票 + SVM分数平票仲裁
- │ aggregate_file   │  弯举票差<2 → 用Stage2平均分数决定
+ │ 文件级决策        │  多数投票 + RF分数平票仲裁
+ │ aggregate_file   │  弯举票差<2 → 用Stage2 RF平均分数决定
  └─────────────────┘
 ```
 
@@ -115,7 +115,7 @@ F40      三头肌RMS
 `aggregate_file_prediction.m` 实现两阶段决策：
 
 1. **多数投票** — 统计各片段预测标签，取多数
-2. **SVM分数仲裁** — 当弯举vs锤式弯举票差 < `cfg.fileVoteMinMargin`(默认2)时，用Stage2 SVM的平均分类分数打破平局
+2. **RF分数仲裁** — 当弯举vs锤式弯举票差 < `cfg.fileVoteMinMargin`(默认2)时，用Stage2 RF的平均分类分数打破平局
 
 输出详细信息包括每文件各标签票数、Stage2平均分数、决策规则。
 
@@ -167,8 +167,8 @@ F40      三头肌RMS
 
 1. **P95通道归一化能量** — 解决跨批/跨电极幅值差异，两通道在分割中等权
 2. **Top-6能量筛选** — 用信号能量而非固定时间参数控制分割段数，对不同节奏鲁棒
-3. **SVM分数平票仲裁** — 文件级决策不只用离散投票，结合连续分数信息
-4. **Stage2留一文件交叉验证** — 评估模型的文件泛化能力，检测过拟合
+3. **RF分数平票仲裁** — 文件级决策不只用离散投票，结合连续分数信息
+4. **Stage2五折交叉验证** — 评估模型泛化能力，附带逐文件错误诊断
 5. **分层特征设计** — Stage1用生理驱动的精简特征(3维)，Stage2用全面的双通道特征(24维)
 
 ## 使用
@@ -185,5 +185,5 @@ run_project
 ## 依赖
 
 - MATLAB R2019b+
-- Statistics and Machine Learning Toolbox (`fitcsvm`, `cvpartition`, `prctile`)
+- Statistics and Machine Learning Toolbox (`fitcsvm`, `TreeBagger`, `cvpartition`, `prctile`)
 - Signal Processing Toolbox (`fft`, `movmean`, `lowpass`, `highpass`)
