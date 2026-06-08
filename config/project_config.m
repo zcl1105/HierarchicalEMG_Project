@@ -1,7 +1,7 @@
 function cfg = project_config(projectRoot)
 cfg.projectRoot = projectRoot;
 cfg.fs = 2000;
-cfg.randomSeed = 1;
+cfg.randomSeed = 42;
 cfg.showTrainPlots  = false;
 cfg.showHiddenPlots = false;
 cfg.forceRetrain = true;
@@ -50,5 +50,7 @@ cfg.postPad_s       = 0.20;
 cfg.sameActionGap_s = 0.75;
 
 % --- training ---
-cfg.testRatio = 0.30;
+cfg.testRatio = 0.3;
+cfg.rfNumTrees = 100;       % RF: 树的数量 (样本少时宜少, 避免过拟合)
+cfg.rfMinLeafSize = 5;     % RF: 叶节点最少样本 (↑防过拟合 ↓可能欠拟合)
 end

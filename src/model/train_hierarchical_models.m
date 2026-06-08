@@ -33,7 +33,7 @@ X2Train = XTrain(curlTrainIdx, cfg.stage2FeatureIdx);
 Y2Train = YTrain(curlTrainIdx);
 [X2TrainZ, mu2, sigma2] = zscore_safe(X2Train);
 model2 = struct();
-model2.rf = TreeBagger(100, X2TrainZ, Y2Train, 'Method', 'classification');
+model2.rf = TreeBagger(cfg.rfNumTrees, X2TrainZ, Y2Train, 'Method', 'classification', 'MinLeafSize', cfg.rfMinLeafSize);
 model2.isRF = true;
 
 fprintf('Stage1: %d features | Stage2: %d features, %d curl train / %d curl test\n', ...
@@ -70,43 +70,58 @@ end
 end
 
 function diag = compute_stage2_group_diagnostics(X, Y, groups, cfg)
-curlIdxAll = Y ~= 3;
-curlGroups = unique(groups(curlIdxAll));
-YPred = [];
-YTrue = [];
+% 5-fold cross-validation on Stage 2 (curl vs hammer curl).
+% Each fold is a stratified split of all curl samples.
 
-for i = 1:numel(curlGroups)
-    testIdx = curlIdxAll & groups == curlGroups(i);
-    trainIdx = curlIdxAll & groups ~= curlGroups(i);
-    if numel(unique(Y(trainIdx))) < 2
-        continue;
-    end
+curlIdx = Y ~= 3;
+XCurl = X(curlIdx, cfg.stage2FeatureIdx);
+YCurl = Y(curlIdx);
 
-    XTrain = X(trainIdx, cfg.stage2FeatureIdx);
-    YTrain = Y(trainIdx);
-    XTest = X(testIdx, cfg.stage2FeatureIdx);
-    YTest = Y(testIdx);
+cv = cvpartition(YCurl, 'KFold', 5);
+YPred = zeros(size(YCurl));
+
+for fold = 1:5
+    trainIdx = training(cv, fold);
+    testIdx = test(cv, fold);
+
+    XTrain = XCurl(trainIdx, :);
+    YTrain = YCurl(trainIdx);
+    XTest  = XCurl(testIdx, :);
 
     [XTrainZ, mu, sigma] = zscore_safe(XTrain);
-    rfModel = TreeBagger(100, XTrainZ, YTrain, 'Method', 'classification');
+    rfModel = TreeBagger(cfg.rfNumTrees, XTrainZ, YTrain, ...
+        'Method', 'classification', 'MinLeafSize', cfg.rfMinLeafSize);
     XTestZ = apply_zscore_safe(XTest, mu, sigma);
     predCell = predict(rfModel, XTestZ);
-    pred = str2double(predCell);
-
-    YPred = [YPred; pred(:)]; %#ok<AGROW>
-    YTrue = [YTrue; YTest(:)]; %#ok<AGROW>
+    YPred(testIdx) = str2double(predCell);
 end
 
-conf = zeros(2, 2);
-for r = 1:2
-    for c = 1:2
-        conf(r, c) = sum(YTrue == r & YPred == c);
+conf = confusionmat(YCurl, YPred, 'Order', [1 2]);
+
+% per-file error breakdown
+curlGroups = string(groups(curlIdx));
+allFiles = unique(curlGroups);
+fprintf('  Stage2 CV per-file errors:\n');
+for f = 1:numel(allFiles)
+    fileIdx = curlGroups == allFiles(f);
+    fileY = YCurl(fileIdx);
+    filePred = YPred(fileIdx);
+    nErr = sum(fileY ~= filePred);
+    if nErr > 0
+        errs = '';
+        for s = 1:sum(fileIdx)
+            if fileY(s) ~= filePred(s)
+                errs = [errs sprintf('%d→%d ', fileY(s), filePred(s))]; %#ok<AGROW>
+            end
+        end
+        [~, fname, ext] = fileparts(allFiles(f));
+        fprintf('    %s%s: %d/%d [%s]\n', fname, ext, nErr, sum(fileIdx), strtrim(errs));
     end
 end
 
 diag = struct();
-diag.Accuracy = mean(YPred == YTrue);
-diag.NCorrect = sum(YPred == YTrue);
-diag.NTotal = numel(YTrue);
+diag.Accuracy = mean(YPred == YCurl);
+diag.NCorrect = sum(YPred == YCurl);
+diag.NTotal = numel(YCurl);
 diag.Confusion = conf;
 end
